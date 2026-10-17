@@ -3,16 +3,25 @@ import time
 from .profile import Profile, key_id
 
 
+def _kid(name):
+    return key_id(name) if name else -1      # unassigned -> a key that never has depth
+
+
 class Engine:
     def __init__(self, profile: Profile, sink):
-        self.p, self.sink = profile, sink
+        self.sink = sink
         self.depth = {}                      # key id -> 0..1
+        self.last = None                     # (axes, triggers, buttons) from the last tick
         self._exit_since = None
-        # resolve names once so a typo fails at startup, not mid-game
-        self._axes = {n: (key_id(v["neg"]), key_id(v["pos"])) for n, v in profile.axes.items()}
-        self._trig = {n: key_id(k) for n, k in profile.triggers.items()}
-        self._btns = {key_id(k): b for k, b in profile.buttons.items()}
-        self._exit = key_id(profile.exit_key)
+        self.set_profile(profile)
+
+    def set_profile(self, profile: Profile):
+        """Compile first, then swap, so a bad profile raises ValueError and changes nothing."""
+        axes = {n: (_kid(v.get("neg")), _kid(v.get("pos"))) for n, v in profile.axes.items()}
+        trig = {n: _kid(k) for n, k in profile.triggers.items()}
+        btns = {key_id(k): b for k, b in profile.buttons.items()}
+        ex = key_id(profile.exit_key)
+        self._axes, self._trig, self._btns, self._exit, self.p = axes, trig, btns, ex, profile
 
     def feed(self, r):
         p = self.p
@@ -41,5 +50,6 @@ class Engine:
             axes[name] = 0.0 if abs(v) < p.deadzone else max(-1.0, min(1.0, v))
         triggers = {n: d(k) for n, k in self._trig.items()}
         buttons = {b for k, b in self._btns.items() if d(k) > p.button_threshold}
+        self.last = (axes, triggers, buttons)
         self.sink.update(axes, triggers, buttons)
         return True

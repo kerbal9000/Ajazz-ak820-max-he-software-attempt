@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AK820 Gamepad</title>
+<style>
+:root{--bg:#14161a;--panel:#1d2026;--key:#2a2e36;--fill:#3b82f6;--text:#e6e8eb;--dim:#8b93a1;--line:#343a45}
+*{box-sizing:border-box}
+body{margin:0;padding:20px;background:var(--bg);color:var(--text);font:14px system-ui,sans-serif}
+h1{font-size:18px;margin:0}h2{font-size:12px;margin:0 0 10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:14px}
+#kb{overflow-x:auto}.row{display:flex;margin-bottom:4px}
+.k{--d:0;height:44px;margin-right:4px;flex:none;border-radius:6px;border:1px solid var(--line);font-size:11px;color:var(--dim);
+ display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;user-select:none;
+ background:linear-gradient(to top,var(--fill) calc(var(--d)*1%),var(--key) calc(var(--d)*1%))}
+.k b{font-weight:500;color:var(--text)}.k.has{border-color:var(--fill)}.k.sel{outline:2px solid #f59e0b}
+select,button{background:var(--key);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font:inherit}
+button{cursor:pointer}input[type=range]{width:100%}
+label{display:flex;justify-content:space-between;color:var(--dim);margin-top:10px}label span{color:var(--text)}
+.pads{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.pad{position:relative;width:90px;height:90px;border:1px solid var(--line);border-radius:50%}
+.dot{position:absolute;left:50%;top:50%;width:12px;height:12px;border-radius:50%;background:var(--fill);transform:translate(-50%,-50%)}
+.bar{height:8px;margin:4px 0 10px;background:var(--key);border-radius:4px;overflow:hidden;width:110px}
+.bar i{display:block;height:100%;width:0;background:var(--fill)}
+.dim{color:var(--dim)}#st{font-size:12px;color:var(--dim)}
+</style></head><body>
+<div class="top"><h1>AK820 MAX HE · Gamepad</h1>
+ <div><span id="st">connecting…</span> <button id="quit">Stop &amp; restore typing</button></div></div>
+
+<div class="panel"><h2>Keyboard (press keys to see live depth · click a key to assign it)</h2><div id="kb"></div></div>
+
+<div class="grid">
+ <div class="panel"><h2>Assign key</h2>
+  <p>Selected: <b id="selname" class="dim">none</b></p>
+  <select id="fn" disabled></select>
+  <p class="dim">Each key has one job and each job one key; assigning a job moves it. The keyboard can't type while this runs, so use the mouse.</p></div>
+ <div class="panel"><h2>Gamepad tester</h2>
+  <div class="pads"><div><div class="pad"><div class="dot" id="ls"></div></div><div class="dim">Left</div></div>
+   <div><div class="pad"><div class="dot" id="rs"></div></div><div class="dim">Right</div></div>
+   <div><div class="dim">LT</div><div class="bar"><i id="lt"></i></div><div class="dim">RT</div><div class="bar"><i id="rt"></i></div></div></div>
+  <p>Buttons: <b id="btns">—</b></p></div>
+ <div class="panel"><h2>Response</h2><div id="sl"></div></div>
+</div>
+
+<script>
+const U=46,ROWS=[
+"Esc F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 _2 Del",
+"` 1 2 3 4 5 6 7 8 9 0 - = Backspace:2 Home",
+"Tab:1.5 Q W E R T Y U I O P [ ] \\:1.5 PgUp",
+"Caps:1.75 A S D F G H J K L ; ' Enter:2.25 PgDn",
+"LShift:2.25 Z X C V B N M , . / RShift:1.75 Up End",
+"LCtrl:1.25 LWin:1.25 LAlt:1.25 Space:6.25 RAlt Fn RCtrl Left Down Right"];
+const SL=[["noise","Noise floor (counts)",0,300,5],["full","Full press (counts)",300,2000,10],
+ ["deadzone","Stick deadzone",0,0.5,0.01],["curve","Curve (>1 gentler start)",0.2,4,0.05],
+ ["button_threshold","Button threshold",0.05,0.95,0.05]];
+const BTN=["A","B","X","Y","LB","RB","L3","R3","START","BACK","DPAD_UP","DPAD_DOWN","DPAD_LEFT","DPAD_RIGHT"];
+const GROUPS=[["Left stick",["left_y+","left_y-","left_x-","left_x+"]],["Right stick",["right_y+","right_y-","right_x-","right_x+"]],
+ ["Triggers",["trigger_left","trigger_right"]],["Buttons",BTN.map(b=>"btn_"+b)]];
+let P,A={},sel=null,els={},timer;
+const $=id=>document.getElementById(id);
+function tag(f){
+ if(f.startsWith("btn_"))return f.slice(4).replace("DPAD_","D-");
+ if(f.startsWith("trigger_"))return f==="trigger_left"?"LT":"RT";
+ const [side,dir]=f.slice(0,-1).split("_"),s=f.slice(-1);
+ return(side==="left"?"LS":"RS")+({x:{"-":"←","+":"→"},y:{"-":"↓","+":"↑"}})[dir][s];}
+function toAssign(p){const a={};
+ for(const[ax,v]of Object.entries(p.axes)){if(v.neg)a[v.neg]=ax+"-";if(v.pos)a[v.pos]=ax+"+";}
+ for(const[t,k]of Object.entries(p.triggers))a[k]="trigger_"+t;
+ for(const[k,b]of Object.entries(p.buttons))a[k]="btn_"+b;return a;}
+function fromAssign(a,p){
+ const axes={};for(const n of["left_x","left_y","right_x","right_y"])axes[n]={neg:null,pos:null};
+ const triggers={},buttons={};
+ for(const[k,f]of Object.entries(a)){
+  if(f.startsWith("btn_"))buttons[k]=f.slice(4);
+  else if(f.startsWith("trigger_"))triggers[f.slice(8)]=k;
+  else axes[f.slice(0,-1)][f.endsWith("+")?"pos":"neg"]=k;}
+ return{...p,axes,triggers,buttons};}
+function build(){const kb=$("kb");kb.innerHTML="";
+ for(const r of ROWS){const row=document.createElement("div");row.className="row";
+  for(const t of r.split(" ")){
+   if(t[0]==="_"){const s=document.createElement("div");s.style.width=(+t.slice(1)*U)+"px";row.append(s);continue;}
+   const i=t.lastIndexOf(":"),name=i>0?t.slice(0,i):t,w=i>0?+t.slice(i+1):1,el=document.createElement("div");
+   el.className="k";el.style.width=(w*U-4)+"px";el.onclick=()=>pick(name);els[name]=el;row.append(el);}
+  kb.append(row);}
+ refresh();}
+function refresh(){for(const[name,el]of Object.entries(els)){const f=A[name];
+  el.innerHTML="<b></b>"+(f?"<span></span>":"");el.firstChild.textContent=name;if(f)el.lastChild.textContent=tag(f);
+  el.classList.toggle("has",!!f);el.classList.toggle("sel",name===sel);}}
+function pick(name){sel=name;$("selname").textContent=name;$("selname").className="";
+ $("fn").disabled=false;$("fn").value=A[name]||"";refresh();}
+$("fn").onchange=()=>{if(!sel)return;const v=$("fn").value;
+ if(v)for(const k in A)if(A[k]===v)delete A[k];
+ if(v)A[sel]=v;else delete A[sel];refresh();save();};
+function save(){P=fromAssign(A,P);clearTimeout(timer);$("st").textContent="saving…";
+ timer=setTimeout(async()=>{try{const r=await fetch("/api/profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(P)});
+  const j=await r.json();$("st").textContent=r.ok?"saved":"error: "+j.error;}catch(e){$("st").textContent="not saved";}},300);}
+function sliders(){const box=$("sl");
+ for(const[f,label,min,max,step]of SL){const l=document.createElement("label"),v=document.createElement("span"),i=document.createElement("input");
+  l.append(label,v);i.type="range";Object.assign(i,{min,max,step,value:P[f]});v.textContent=P[f];
+  i.oninput=()=>{P[f]=+i.value;v.textContent=i.value;save();};box.append(l,i);}}
+function fnSelect(){const s=$("fn");s.innerHTML='<option value="">— none —</option>';
+ for(const[g,fs]of GROUPS){const og=document.createElement("optgroup");og.label=g;
+  for(const f of fs){const o=document.createElement("option");o.value=f;o.textContent=tag(f);og.append(o);}s.append(og);}}
+function render(s){
+ for(const[name,el]of Object.entries(els))el.style.setProperty("--d",Math.round((s.depth[KEYS[name]]||0)*100));
+ const a=s.axes||{},t=s.triggers||{};
+ $("ls").style.left=50+(a.left_x||0)*40+"%";$("ls").style.top=50-(a.left_y||0)*40+"%";
+ $("rs").style.left=50+(a.right_x||0)*40+"%";$("rs").style.top=50-(a.right_y||0)*40+"%";
+ $("lt").style.width=(t.left||0)*100+"%";$("rt").style.width=(t.right||0)*100+"%";
+ $("btns").textContent=(s.buttons||[]).join(" ")||"—";}
+let KEYS;
+async function poll(){try{render(await(await fetch("/api/state")).json());
+  if($("st").textContent==="connecting…"||$("st").textContent==="disconnected")$("st").textContent="live";}
+ catch(e){$("st").textContent="disconnected";}setTimeout(poll,50);}
+$("quit").onclick=async()=>{await fetch("/api/quit",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+ $("st").textContent="stopped — keyboard typing restored. You can close this tab.";};
+(async()=>{const c=await(await fetch("/api/config")).json();P=c.profile;KEYS=c.keys;A=toAssign(P);
+ fnSelect();build();sliders();poll();})();
+</script></body></html>
