@@ -11,6 +11,7 @@ A detached watchdog process resets the keyboard if the program is killed or hang
 """
 import argparse
 import json
+import threading
 import time
 
 from ak820.device import Report
@@ -21,43 +22,33 @@ from ak820.watchdog import Watchdog, LOG, send_stop
 
 def cmd_run(a):
     from ak820.device import Board
+    from ak820.session import Session
     from ak820.sinks import VigemSink
     eng = Engine(Profile.load(a.profile), VigemSink())
     # order matters: arm the watchdog first, leave analog mode before disarming
     with Watchdog(enabled=not a.no_watchdog) as wd, Board() as board:
-        print("Running. Hold Esc fully for 0.5 s to quit.")
-        for r in board.reports():
-            if r:
-                eng.feed(r)
-            if not wd.beat():
-                print("Watchdog reset the keyboard (the loop stalled). Exiting.")
-                break
-            if not eng.tick():
-                break
+        print("Running. Hold Esc to quit; hold your mode hotkey to switch to keyboard mode.")
+        Session(board, eng, wd, threading.Event()).run()
 
 
 def cmd_ui(a):
-    import threading
     import webbrowser
     from ak820.device import Board
+    from ak820.session import Session
     from ak820.sinks import VigemSink
     from ak820.ui import App, serve
-    eng = Engine(Profile.load(a.profile), VigemSink())
-    stop = threading.Event()
-    srv = serve(App(eng, a.profile, stop), a.port)
-    url = f"http://127.0.0.1:{a.port}/"
-    print(f"UI at {url}  (keyboard won't type; use the mouse. Hold Esc or press Stop to quit)")
-    if not a.no_browser:
-        webbrowser.open(url)
-    try:
-        with Watchdog() as wd, Board() as board:
-            for r in board.reports():
-                if r:
-                    eng.feed(r)
-                if stop.is_set() or not wd.beat() or not eng.tick():
-                    break
-    finally:
-        srv.shutdown()
+    eng, stop = Engine(Profile.load(a.profile), VigemSink()), threading.Event()
+    with Watchdog() as wd, Board() as board:
+        session = Session(board, eng, wd, stop)
+        srv = serve(App(eng, a.profile, stop, session), a.port)
+        url = f"http://127.0.0.1:{a.port}/"
+        print(f"UI at {url}  (Esc held or the Stop button quits; hotkey/button switches mode)")
+        if not a.no_browser:
+            webbrowser.open(url)
+        try:
+            session.run()
+        finally:
+            srv.shutdown()
 
 
 def cmd_record(a):

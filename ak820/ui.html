@@ -23,25 +23,36 @@ label{display:flex;justify-content:space-between;color:var(--dim);margin-top:10p
 .bar{height:8px;margin:4px 0 10px;background:var(--key);border-radius:4px;overflow:hidden;width:110px}
 .bar i{display:block;height:100%;width:0;background:var(--fill)}
 .dim{color:var(--dim)}#st{font-size:12px;color:var(--dim)}
+.pill{padding:3px 10px;border-radius:99px;font-size:12px;border:1px solid var(--line);margin-right:6px}
+.pill.pad{color:#93c5fd;border-color:var(--fill)}.pill.kb{color:#fcd34d;border-color:#f59e0b}
+.chip{display:inline-flex;align-items:center;background:var(--key);border:1px solid var(--line);border-radius:6px;padding:2px 2px 2px 8px;margin:0 6px 6px 0}
+.chip button{padding:0 6px;border:0;background:none;color:var(--dim)}
+#tip{position:fixed;z-index:9;display:none;max-width:280px;padding:8px 10px;background:#0b0c0f;border:1px solid var(--line);border-radius:6px;font-size:12px;line-height:1.4;pointer-events:none}
 </style></head><body>
 <div class="top"><h1>AK820 MAX HE · Gamepad</h1>
- <div><span id="st">connecting…</span> <button id="quit">Stop &amp; restore typing</button></div></div>
+ <div><span id="st" data-tip="Status of the connection and of the last save.">connecting…</span> <span id="mode" class="pill pad" data-tip="Controller mode: key depth drives the virtual gamepad and normal typing is off. Keyboard mode: the keyboard types normally and the gamepad is paused.">Controller mode</span><button id="sw" data-tip="Flip between controller and keyboard mode with the mouse. Same as holding the hotkey.">Switch to keyboard</button> <button id="quit" data-tip="Leave controller mode and shut the app down so the keyboard types normally again.">Stop &amp; restore typing</button></div></div>
 
-<div class="panel"><h2>Keyboard (press keys to see live depth · click a key to assign it)</h2><div id="kb"></div></div>
+<div class="panel"><h2 data-tip="Live view of every key. Keys fill from the bottom as you press them. Click a key to give it a gamepad job; hover any key to see what it does.">Keyboard (press keys to see live depth · click a key to assign it)</h2><div id="kb"></div></div>
 
 <div class="grid">
- <div class="panel"><h2>Assign key</h2>
+ <div class="panel"><h2 data-tip="Choose which virtual Xbox controller input the selected key controls.">Assign key</h2>
   <p>Selected: <b id="selname" class="dim">none</b></p>
-  <select id="fn" disabled></select>
+  <select id="fn" disabled data-tip="Pick the controller input for the selected key. 'none' clears it."></select>
+  <p id="fndesc" class="dim"></p>
   <p class="dim">Each key has one job and each job one key; assigning a job moves it. The keyboard can't type while this runs, so use the mouse.</p></div>
- <div class="panel"><h2>Gamepad tester</h2>
-  <div class="pads"><div><div class="pad"><div class="dot" id="ls"></div></div><div class="dim">Left</div></div>
+ <div class="panel"><h2 data-tip="Shows what the virtual Xbox controller is sending right now, so you can check your setup without a game.">Gamepad tester</h2>
+  <div class="pads" data-tip="Left stick, right stick, then the LT and RT trigger bars. Dots and bars move as you press your mapped keys."><div><div class="pad"><div class="dot" id="ls"></div></div><div class="dim">Left</div></div>
    <div><div class="pad"><div class="dot" id="rs"></div></div><div class="dim">Right</div></div>
    <div><div class="dim">LT</div><div class="bar"><i id="lt"></i></div><div class="dim">RT</div><div class="bar"><i id="rt"></i></div></div></div>
-  <p>Buttons: <b id="btns">—</b></p></div>
- <div class="panel"><h2>Response</h2><div id="sl"></div></div>
+  <p data-tip="Gamepad buttons currently held down.">Buttons: <b id="btns">—</b></p></div>
+ <div class="panel"><h2 data-tip="Hold all of these keys together to flip between controller mode (keys drive the gamepad, normal typing is off) and keyboard mode (normal typing, gamepad paused).">Mode hotkey</h2>
+  <div id="chord"></div>
+  <select id="hk" data-tip="Add another key to the hotkey (2 to 4 keys). Keys already used for the gamepad aren't listed."></select> <button id="hkadd" data-tip="Add the chosen key to the hotkey.">Add</button>
+  <p class="dim">Pick keys you don't use in games. When you leave controller mode the keys may type once, so avoid combos that do something in your apps.</p></div>
+ <div class="panel"><h2 data-tip="Tune how raw key depth becomes controller values. Changes apply instantly and are saved.">Response</h2><div id="sl"></div></div>
 </div>
 
+<div id="tip"></div>
 <script>
 const U=46,ROWS=[
 "Esc F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 _2 Del",
@@ -50,9 +61,9 @@ const U=46,ROWS=[
 "Caps:1.75 A S D F G H J K L ; ' Enter:2.25 PgDn",
 "LShift:2.25 Z X C V B N M , . / RShift:1.75 Up End",
 "LCtrl:1.25 LWin:1.25 LAlt:1.25 Space:6.25 RAlt Fn RCtrl Left Down Right"];
-const SL=[["noise","Noise floor (counts)",0,300,5],["full","Full press (counts)",300,2000,10],
- ["deadzone","Stick deadzone",0,0.5,0.01],["curve","Curve (>1 gentler start)",0.2,4,0.05],
- ["button_threshold","Button threshold",0.05,0.95,0.05]];
+const SL=[["noise","Noise floor (counts)",0,300,5,"Raw depth below this counts as zero. Raise it if keys trigger by themselves; lower it for more sensitivity at the very top of the press."],["full","Full press (counts)",300,2000,10,"How much raw travel counts as 100%. A full press is roughly 1000-1200. Lower it to reach full stick earlier; raise it to use the whole travel."],
+ ["deadzone","Stick deadzone",0,0.5,0.01,"Stick movement smaller than this is ignored. Stops light touches from nudging the stick."],["curve","Curve (>1 gentler start)",0.2,4,0.05,"Reshapes the response. 1 is linear. Above 1 starts gently and ramps up; below 1 is more sensitive at the start."],
+ ["button_threshold","Button threshold",0.05,0.95,0.05,"How far a key must be pressed before a gamepad button counts as pressed (0.5 = halfway). Also used for the mode hotkey."]];
 const BTN=["A","B","X","Y","LB","RB","L3","R3","START","BACK","DPAD_UP","DPAD_DOWN","DPAD_LEFT","DPAD_RIGHT"];
 const GROUPS=[["Left stick",["left_y+","left_y-","left_x-","left_x+"]],["Right stick",["right_y+","right_y-","right_x-","right_x+"]],
  ["Triggers",["trigger_left","trigger_right"]],["Buttons",BTN.map(b=>"btn_"+b)]];
@@ -85,18 +96,21 @@ function build(){const kb=$("kb");kb.innerHTML="";
  refresh();}
 function refresh(){for(const[name,el]of Object.entries(els)){const f=A[name];
   el.innerHTML="<b></b>"+(f?"<span></span>":"");el.firstChild.textContent=name;if(f)el.lastChild.textContent=tag(f);
-  el.classList.toggle("has",!!f);el.classList.toggle("sel",name===sel);}}
+  el.classList.toggle("has",!!f);el.classList.toggle("sel",name===sel);
+  el.dataset.tip=name+": "+(f?tag(f)+" — "+desc(f):P.hotkey.includes(name)?"Part of the mode hotkey.":"Not assigned. Click to give it a gamepad job.");}
+ hkRefresh();}
 function pick(name){sel=name;$("selname").textContent=name;$("selname").className="";
- $("fn").disabled=false;$("fn").value=A[name]||"";refresh();}
+ $("fn").disabled=false;$("fn").value=A[name]||"";fnd();refresh();}
 $("fn").onchange=()=>{if(!sel)return;const v=$("fn").value;
+ if(v&&P.hotkey.includes(sel)){$("st").textContent="that key is part of the mode hotkey; remove it from the hotkey first";$("fn").value=A[sel]||"";return;}
  if(v)for(const k in A)if(A[k]===v)delete A[k];
- if(v)A[sel]=v;else delete A[sel];refresh();save();};
+ if(v)A[sel]=v;else delete A[sel];fnd();refresh();save();};
 function save(){P=fromAssign(A,P);clearTimeout(timer);$("st").textContent="saving…";
  timer=setTimeout(async()=>{try{const r=await fetch("/api/profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(P)});
   const j=await r.json();$("st").textContent=r.ok?"saved":"error: "+j.error;}catch(e){$("st").textContent="not saved";}},300);}
 function sliders(){const box=$("sl");
- for(const[f,label,min,max,step]of SL){const l=document.createElement("label"),v=document.createElement("span"),i=document.createElement("input");
-  l.append(label,v);i.type="range";Object.assign(i,{min,max,step,value:P[f]});v.textContent=P[f];
+ for(const[f,label,min,max,step,tipText]of SL){const l=document.createElement("label"),v=document.createElement("span"),i=document.createElement("input");
+  l.append(label,v);l.dataset.tip=i.dataset.tip=tipText;i.type="range";Object.assign(i,{min,max,step,value:P[f]});v.textContent=P[f];
   i.oninput=()=>{P[f]=+i.value;v.textContent=i.value;save();};box.append(l,i);}}
 function fnSelect(){const s=$("fn");s.innerHTML='<option value="">— none —</option>';
  for(const[g,fs]of GROUPS){const og=document.createElement("optgroup");og.label=g;
@@ -107,11 +121,34 @@ function render(s){
  $("ls").style.left=50+(a.left_x||0)*40+"%";$("ls").style.top=50-(a.left_y||0)*40+"%";
  $("rs").style.left=50+(a.right_x||0)*40+"%";$("rs").style.top=50-(a.right_y||0)*40+"%";
  $("lt").style.width=(t.left||0)*100+"%";$("rt").style.width=(t.right||0)*100+"%";
- $("btns").textContent=(s.buttons||[]).join(" ")||"—";}
+ $("btns").textContent=(s.buttons||[]).join(" ")||"—";
+ const kb=s.mode==="keyboard";$("mode").textContent=kb?"Keyboard mode":"Controller mode";$("mode").className="pill "+(kb?"kb":"pad");
+ $("sw").textContent=kb?"Switch to controller":"Switch to keyboard";}
 let KEYS;
 async function poll(){try{render(await(await fetch("/api/state")).json());
   if($("st").textContent==="connecting…"||$("st").textContent==="disconnected")$("st").textContent="live";}
  catch(e){$("st").textContent="disconnected";}setTimeout(poll,50);}
+const BDESC={A:"Xbox A button (bottom face button, usually confirm or jump).",B:"Xbox B button (right face button, usually back or cancel).",X:"Xbox X button (left face button).",Y:"Xbox Y button (top face button).",LB:"Left bumper, the shoulder button above the left trigger.",RB:"Right bumper, the shoulder button above the right trigger.",L3:"Left stick click (pressing the stick in).",R3:"Right stick click.",START:"Start / Menu button.",BACK:"Back / View button.",DPAD_UP:"D-pad up.",DPAD_DOWN:"D-pad down.",DPAD_LEFT:"D-pad left.",DPAD_RIGHT:"D-pad right."};
+function desc(f){
+ if(f.startsWith("btn_"))return BDESC[f.slice(4)]+" Counts as pressed once the key passes the button threshold.";
+ if(f.startsWith("trigger_")){const l=f.endsWith("left");return `Analog ${l?"left (LT)":"right (RT)"} trigger. How far you press the key sets how far the trigger pulls, handy for throttle and brake.`;}
+ const[side,dir]=f.slice(0,-1).split("_"),w={x:{"-":"left","+":"right"},y:{"-":"down","+":"up"}}[dir][f.slice(-1)];
+ return `Pushes the ${side} stick ${w}. The deeper the press, the further the stick moves, so a light press gives gentle movement. Holding the opposite direction cancels it out.`;}
+function fnd(){const f=$("fn").value;$("fndesc").textContent=f?tag(f)+" — "+desc(f):"";}
+function hkRefresh(){const c=$("chord");c.innerHTML="";
+ for(const n of P.hotkey){const s=document.createElement("span"),x=document.createElement("button");s.className="chip";s.append(n+" ");
+  x.textContent="✕";x.dataset.tip="Remove "+n+" from the hotkey";
+  x.onclick=()=>{if(P.hotkey.length<=2){$("st").textContent="the hotkey needs at least 2 keys";return;}P.hotkey=P.hotkey.filter(k=>k!==n);hkRefresh();save();};
+  s.append(x);c.append(s);}
+ const o=$("hk");o.innerHTML="";
+ for(const n of Object.keys(KEYS))if(n!=="Fn"&&!A[n]&&!P.hotkey.includes(n)){const e=document.createElement("option");e.value=e.textContent=n;o.append(e);}}
+$("hkadd").onclick=()=>{const n=$("hk").value;if(!n)return;
+ if(P.hotkey.length>=4){$("st").textContent="the hotkey can have at most 4 keys";return;}P.hotkey.push(n);hkRefresh();save();};
+$("sw").onclick=()=>fetch("/api/mode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:$("mode").classList.contains("kb")?"controller":"keyboard"})});
+const tip=$("tip");
+document.addEventListener("mouseover",e=>{const t=e.target.closest("[data-tip]");if(t){tip.textContent=t.dataset.tip;tip.style.display="block";}else tip.style.display="none";});
+document.addEventListener("mousemove",e=>{if(tip.style.display!=="block")return;const w=tip.offsetWidth,h=tip.offsetHeight;
+ tip.style.left=Math.min(e.clientX+14,innerWidth-w-8)+"px";tip.style.top=(e.clientY+16+h>innerHeight?e.clientY-h-12:e.clientY+16)+"px";});
 $("quit").onclick=async()=>{await fetch("/api/quit",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
  $("st").textContent="stopped — keyboard typing restored. You can close this tab.";};
 (async()=>{const c=await(await fetch("/api/config")).json();P=c.profile;KEYS=c.keys;A=toAssign(P);

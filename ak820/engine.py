@@ -21,7 +21,17 @@ class Engine:
         trig = {n: _kid(k) for n, k in profile.triggers.items()}
         btns = {key_id(k): b for k, b in profile.buttons.items()}
         ex = key_id(profile.exit_key)
+        self._hot = [key_id(n) for n in profile.hotkey]
         self._axes, self._trig, self._btns, self._exit, self.p = axes, trig, btns, ex, profile
+
+    def chord_held(self) -> bool:
+        return bool(self._hot) and all(self.depth.get(k, 0.0) > self.p.button_threshold for k in self._hot)
+
+    def release_all(self):
+        """Neutral pad (used when leaving controller mode)."""
+        self.depth.clear()
+        self.last = ({n: 0.0 for n in self._axes}, {n: 0.0 for n in self._trig}, set())
+        self.sink.update(*self.last)
 
     def feed(self, r):
         p = self.p

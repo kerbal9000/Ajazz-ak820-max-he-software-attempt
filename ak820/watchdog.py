@@ -115,7 +115,15 @@ def monitor(pid, hb, timeout, stop_fn, poll=0.25) -> int:
         log("disarmed cleanly")
         return 0
     log(f"TRIPPED: {reason}")
-    stop_fn()
+    try:
+        with open(hb) as f:
+            active = f.read().strip() != "0"
+    except OSError:
+        active = True
+    if active:
+        stop_fn()
+    else:
+        log("keyboard was in normal mode; nothing to reset")
     try:
         os.remove(hb)                 # tells a hung-but-alive program that it was reset
     except OSError:
@@ -136,7 +144,8 @@ class Watchdog:
         """Call BEFORE the keyboard enters analog mode."""
         if not self.enabled:
             return
-        open(self.path, "w").close()
+        with open(self.path, "w") as f:
+            f.write("1")           # 1 = keyboard is in analog mode
         cmd = [sys.executable, "-m", "ak820.watchdog", "--pid", str(os.getpid()),
                "--hb", self.path, "--timeout", str(self.timeout)]
         if self.dry_run:
@@ -164,6 +173,16 @@ class Watchdog:
         except FileNotFoundError:
             self._armed = False
             return False
+
+    def set_active(self, active: bool):
+        """Tell the watchdog whether the keyboard is in analog mode (nothing to reset if not)."""
+        if self._armed:
+            try:
+                with open(self.path, "r+") as f:
+                    f.write("1" if active else "0")
+                    f.truncate()
+            except OSError:
+                pass
 
     def disarm(self):
         """Call AFTER the keyboard has left analog mode."""

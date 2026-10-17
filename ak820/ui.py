@@ -5,6 +5,7 @@ import threading
 from dataclasses import asdict, fields
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from .hotkey import VK
 from .profile import Profile, KEYS
 from .sinks import _BUTTONS
 
@@ -15,8 +16,8 @@ AXES = {"left_x", "left_y", "right_x", "right_y"}
 
 
 class App:
-    def __init__(self, engine, profile_path, stop):
-        self.engine, self.path, self.stop = engine, profile_path, stop
+    def __init__(self, engine, profile_path, stop, session):
+        self.engine, self.path, self.stop, self.session = engine, profile_path, stop, session
 
     def apply(self, data):
         known = {f.name for f in fields(Profile)}
@@ -30,6 +31,13 @@ class App:
             raise ValueError("unknown axis or trigger name")
         if any(b not in _BUTTONS for b in p.buttons.values()):
             raise ValueError("unknown gamepad button")
+        hk = p.hotkey
+        if not 2 <= len(hk) <= 4 or len(set(hk)) != len(hk) or any(n not in VK for n in hk):
+            raise ValueError("hotkey needs 2-4 different keys (Fn can't be used)")
+        used = set(p.buttons) | set(p.triggers.values()) | {
+            k for v in p.axes.values() for k in (v.get("neg"), v.get("pos")) if k}
+        if used & set(hk):
+            raise ValueError("hotkey keys can't also be gamepad keys: " + ", ".join(sorted(used & set(hk))))
         self.engine.set_profile(p)          # raises ValueError on unknown key names
         p.save(self.path)
 
@@ -64,7 +72,8 @@ def _handler(app, port):
                 axes, trig, btn = e.last or ({}, {}, set())
                 depth = {str(k): round(v, 3) for k, v in list(e.depth.items()) if v > 0}
                 return self._send(200, {"depth": depth, "axes": axes, "triggers": trig,
-                                        "buttons": sorted(btn)})
+                                        "buttons": sorted(btn),
+                                        "mode": app.session.mode})
             self._send(404, {"error": "not found"})
 
         def do_POST(self):
@@ -75,6 +84,11 @@ def _handler(app, port):
                 data = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
                 if self.path == "/api/profile":
                     app.apply(data)
+                    return self._send(200, {"ok": True})
+                if self.path == "/api/mode":
+                    if data.get("mode") not in ("controller", "keyboard"):
+                        raise ValueError("mode must be controller or keyboard")
+                    app.session.request(data["mode"])
                     return self._send(200, {"ok": True})
                 if self.path == "/api/quit":
                     app.stop.set()

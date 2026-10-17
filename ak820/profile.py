@@ -36,6 +36,7 @@ class Profile:
     curve: float = 1.0         # >1 = gentler start, <1 = more sensitive start
     button_threshold: float = 0.5
     exit_key: str = "Esc"      # hold fully ~0.5 s to quit
+    hotkey: list = field(default_factory=lambda: ["LCtrl", "LAlt", "F11"])  # mode switch chord
     axes: dict = field(default_factory=lambda: {
         "left_x":  {"neg": "A",    "pos": "D"},
         "left_y":  {"neg": "S",    "pos": "W"},

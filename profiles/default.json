@@ -1,43 +1,17 @@
 {
   "name": "default",
-  "noise": 0,
+  "noise": 40,
   "full": 1000,
-  "deadzone": 0,
-  "curve": 1,
+  "deadzone": 0.05,
+  "curve": 1.0,
   "button_threshold": 0.5,
   "exit_key": "Esc",
   "axes": {
-    "left_x": {
-      "neg": "A",
-      "pos": "D"
-    },
-    "left_y": {
-      "neg": "LCtrl",
-      "pos": "LShift"
-    },
-    "right_x": {
-      "neg": "Left",
-      "pos": "Right"
-    },
-    "right_y": {
-      "neg": "Down",
-      "pos": "Up"
-    }
+    "left_x":  {"neg": "A",    "pos": "D"},
+    "left_y":  {"neg": "S",    "pos": "W"},
+    "right_x": {"neg": "Left", "pos": "Right"},
+    "right_y": {"neg": "Down", "pos": "Up"}
   },
-  "triggers": {
-    "left": "S",
-    "right": "W"
-  },
-  "buttons": {
-    "1": "DPAD_UP",
-    "2": "DPAD_DOWN",
-    "3": "DPAD_LEFT",
-    "4": "DPAD_RIGHT",
-    "Space": "A",
-    "C": "B",
-    "X": "X",
-    "V": "Y",
-    "E": "RB",
-    "Q": "LB"
-  }
+  "triggers": {"left": "Q", "right": "E"},
+  "buttons": {"Space": "A", "C": "B", "X": "X", "V": "Y", "LShift": "LB", "R": "RB"}
 }
