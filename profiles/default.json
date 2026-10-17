@@ -1,0 +1,17 @@
+{
+  "name": "default",
+  "noise": 40,
+  "full": 1000,
+  "deadzone": 0.05,
+  "curve": 1.0,
+  "button_threshold": 0.5,
+  "exit_key": "Esc",
+  "axes": {
+    "left_x":  {"neg": "A",    "pos": "D"},
+    "left_y":  {"neg": "S",    "pos": "W"},
+    "right_x": {"neg": "Left", "pos": "Right"},
+    "right_y": {"neg": "Down", "pos": "Up"}
+  },
+  "triggers": {"left": "Q", "right": "E"},
+  "buttons": {"Space": "A", "C": "B", "X": "X", "V": "Y", "LShift": "LB", "R": "RB"}
+}
